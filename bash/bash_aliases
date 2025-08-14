@@ -1,0 +1,111 @@
+# Include any local host functions as /root/.bash_local (sourced in .bash_profile)
+
+alias ll='ls --color=auto -alh'
+#export GREP_OPTIONS='--color=always'
+alias grep='grep --color=always'
+alias sgrep='grep --color=always --exclude-dir=.git --exclude-dir=.hg -irHnI'
+alias sfgrep='grep --color=always -irIl'
+alias ipgrep='grep --color=always -iIE -e "[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}(|/[0-3][0-9])"'
+alias 'grep-ip'="grep"
+alias macgrep='grep --color=always -iIE -e "[0-9a-z]{2}:[0-9a-z]{2}:[0-9a-z]{2}:[0-9a-z]{2}:[0-9a-z]{2}:[0-9a-z]{2}"'
+alias 'grep-mac'="grep"
+alias netgrep='grep --color=always -iIE -e "[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}" -e "[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}\.[1-2]?[0-9]{1,2}(|/[0-3][0-9])"'
+alias 'grep-netmask'="grep"
+alias hgrep='history | grep --color=always -i'
+alias 'grep-history'="grep"
+alias cmdgrep='find $(echo $PATH | tr ":" " " ) -type f -o -type l -exec basename {} \; | grep --color=always -iE'
+alias 'grep-cmds'="grep"
+alias 'aliasgrep'='alias | grep --color=always '
+alias 'grep-aliases'="aliasgrep"
+alias timegrep="grep -irHnIE --color=always \
+   -e '(Jan *[0-9]{1,2} *[0-2][0-9]:[0-6][0-9]:[0-6][0-9]' \
+   -e '[0-3][0-9][-/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-/]*[0-9]{1,4}' \
+   -e '[0-9]{1,4}[-/]([0-1][0-9]|[0-9])[-/][0-3][0-9]'"
+alias iptgrep='echo "You must run this as root" && [[ $(type iptables-save &> /dev/null; echo $?) -eq 0 ]] && iptables-save | grep --color=always '
+alias 'grep-iptables'="grep"
+alias dirgrep='grep --color=always -iIE "\/([-0-9a-z_.]*\/){1,100}"'
+alias 'grep-for-dir'="grep"
+alias filegrep='grep --color=always -iIE "\/([-0-9a-z_.]*\/){1,100}[-0-9a-z_.]*"'
+alias 'grep-for-file'="grep"
+alias ncgrep='grep "^[^#;]" '
+alias ncgrep='grep -v -e "^[#;]" -e "^[[:space:]]*[#;]" '
+alias 'grep-no-comments'="ncgrep"
+alias ncwgrep='grep -v -e "^[#;]" -e "^[[:space:]]*[#;]" -e "^[[:space:]]*$" '
+alias 'grep-no-comments-whitespace'="ncwgrep"
+alias passgrep='grep --color=always -i -e api.*key -e key -e "mongodb://" -e pass -e secret -e "mysql.* \-p"'
+alias 'grep-for-secrets'='passgrep'
+alias ssgrep='ss -ntlpu | grep --color=always -i '
+alias 'grep-ss-listening-tcp-udp'='ssgrep'
+
+alias lscmd='find $(echo $PATH | tr ":" " " ) -type f -o -type l -exec basename {} \; | sort -u'
+
+# Allow vim/view to open multiple files w/o typing ' -O' each time - no ill effect on performance for single file
+alias vim='vim -O '
+alias view='view -O '
+
+# Reload bash config
+#alias refresh="source $HOME/.bash{_{aliases,creds.sample,functions,profile,work},rc}"
+alias refresh="source $HOME/.bash_profile"
+
+# Count files in dir
+alias filecount='for i in *; do echo -e "$(find $i | wc -l)\t$i"; done | sort -n'
+
+# Show Mercurial log in less
+alias hlog='hg log | less'
+
+# Show verbose Mercurial log in less
+alias hlogv='hg log -v | less'
+
+# Remove unknown files from Mercurial repo
+alias hgrmu="hg status -u | cut -d ' ' -f 2 | xargs rm"
+
+# Remove "deleted" files from Mercurial repo
+alias hgrmd="hg status -d | cut -d ' ' -f 2 | xargs hg rm"
+
+# Allow rebasing in Mercurial repos
+alias hgallow='hg phase --force --draft "outgoing() and public()"'
+
+# hg patches
+alias hqr='hg qrefresh -e'
+alias hqrr='hg qrefresh'
+alias hqpu='hg qpush'
+alias hqpo='hg qpop'
+
+# lsig - List installed grep
+#alias lsig='apt list --installed | grep'
+alias lsig2="dpkg --get-selections | grep -iw install | awk '{ print \$1 }' | grep --color=always -i"
+
+# Common du
+alias 'du*'='du -sch *'
+alias 'duG+'='du -sch -t +1G *'
+alias 'duG-'='du -sch -t -1G *'
+alias 'duM+'='du -sch -t +1M *'
+alias 'duM-'='du -sch -t -1M *'
+
+
+# One off aliases for tickets:
+alias mymv="mv -v $HOME/Downloads/*.sql ."
+alias myscp="scp $ORG_USER@$WS_IP:$HOME/Downloads/*sql ."
+
+#PW free scp alias
+alias scpe="scp -i $HOME/.ssh/id_rsa "
+
+#CD shortcut
+alias 'cd-'='cd -'
+alias 'cd..'='cd ../'
+alias 'cd...'='cd ../../'
+alias 'cd....'='cd ../../../'
+alias 'cd.....'='cd ../../../../'
+alias 'cd......'='cd ../../../../../'
+alias 'cd.......'='cd ../../../../../../'
+alias 'cd........'='cd ../../../../../../../'
+
+alias sort-cnt="sort | uniq -c | sort -n" # Can add -r to reverse sort at the end
+
+alias CC='echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"'
+alias CCC='(CC;CC;)'
+alias CCCC='(CCC;CCC;)'
+
+#Git and Hg random
+alias git-pull-all-under-cd='for i in $(find . -name .git -exec realpath {} \;); do git -C $i/.. pull; done'; # cd to and pull every repo under your current directory
+alias hg-pull-all-under-cd='for i in $(find . -name .hg -exec realpath {} \;); do hg -R $i/.. pull -u; done'; # cd to and pull every repo under your current directory
