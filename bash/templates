@@ -1,0 +1,97 @@
+#########################FUNCTION TEMPLATES##########################
+function TMP () {
+FN="${FUNCNAME[0]}"
+SYNTAX="Proper syntax:\n$FN"
+options=$(getopt -o brghv --long color: -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h|-v) echo -e "$SYNTAX" && return 1;;
+  -b) COL=BLUE;;
+  -r) COL=RED;;
+  -g) COLOR=GREEN;;
+  --color)
+  shift; # The arg is next in position args
+  COLOR=$1
+  [[ ! $COLOR =~ BLUE|RED|GREEN ]] && {
+    echo "Incorrect options provided"; return 1;
+  };;
+  --) shift; break ;;
+  esac
+  shift
+done
+# Dependencies
+[[ $# -ne 1 ]] && echo -e "$SYNTAX" && return 1;
+[[ -z $VAR ]] && echo -e "Please define variable $VAR" && return 1;
+[[ ! -f $FILE ]] && echo -e "Please ensure file $FILE exists" && return 1;
+# Main Script
+}
+#########################FUNCTION TEMPLATES##########################
+function getopt-syntax () {
+  options=$(getopt -o h::r:: --long help::,refresh:: -- "$@")
+  echo "$options"
+  [ $? -eq 0 ] || {
+    echo "Incorrect options provided"
+    exit 1
+  }
+  eval set -- "$options"
+  echo "$options"
+  while true; do
+    case "$1" in
+      -h) 
+        echo -e "help"; return 1;;
+      -r | --refresh) 
+        echo -e "refresh"; return 1;;
+      --)
+        shift; break;;
+      *) echo -e "Total bullshit."; return 1;
+    esac
+    shift
+  done
+echo "No options specified"
+}
+
+function getopt-syntax2 () {
+
+# Call getopt to validate the provided input. 
+options=$(getopt -o brg --long color: -- "$@")
+[ $? -eq 0 ] || { 
+    echo -e "Incorrect options provided"
+    return 1;
+}
+eval set -- "$options"
+while true; do
+    case "$1" in
+    -b) COLOR=BLUE;;
+    -r) COLOR=RED;;
+    -g) COLOR=GREEN;;
+    --color)
+        shift; # The arg is next in position args
+        COLOR=$1
+        [[ ! $COLOR =~ BLUE|RED|GREEN ]] && {
+            echo -e "Incorrect options provided"; return 1;
+         };;
+    --) shift; break ;;
+    esac
+    shift
+done
+echo "Color is $COLOR"
+return 0;
+}
+
+function getopt-syntax3 () {
+  USAGE='Usage:'
+  [[ $# -eq 0 || $# -gt 2 ]] && echo -e "$USAGE" && return 1
+  options=$(getopt -o h::c:: -- "$@")
+  [[ $? -ne 0 ]] && echo "Incorrect options provided, exiting..." && return 1
+  eval set -- "$options"
+  while true; do
+    case "$1" in
+      -h) echo -e "$USAGE"; return 1;;
+      -c) echo -e "refresh"; return 1;;
+      --) shift; break;;
+#      *) echo "$1 is an invalid option, exiting..."; return 1;
+    esac
+    shift
+  done
+}
