@@ -1,0 +1,946 @@
+#!/bin/bash
+# All file sourcing now in .bash_profile
+#source $HOME/.bash_wrappers
+
+################## MISC UTILITIES/FUNCTIONS #################
+
+function lll () {
+	ls -alh ./{,*/,*/*/,*/*/*/,*/*/*/*/,*/*/*/*/*/,*/*/*/*/*/*/,*/*/*/*/*/*/*/}$1 2> /dev/null
+}
+
+function llld () {
+	ls -alhd ./{,*/,*/*/,*/*/*/,*/*/*/*/,*/*/*/*/*/,*/*/*/*/*/*/,*/*/*/*/*/*/*/}$1 2> /dev/null
+}
+
+function filename-safe-convert () {
+  basename "$1" | sed -E 's/[^0-9a-zA-Z\.\-]/\-/g' | sed 's/--/-/g;s/--/-/g'
+}
+
+function timestamp () {
+   date +"%y%m%d-%H%M"
+}
+alias TS='timestamp'
+
+function urlencode_od_awk () {
+  echo -n "$1" | od -t d1 | awk '{
+      for (i = 2; i <= NF; i++) {
+        printf(($i>=48 && $i<=57) || ($i>=65 && $i<=90) || ($i>=97 && $i<=122) ||
+                $i==45 || $i==46 || $i==95 || $i==126 ?
+               "%c" : "%%%02x", $i)
+      }
+    }'
+}
+
+################## grep functions #################
+
+function authgrep () {
+   grep --color=always -io 'user.[a-z]*' /var/log/auth.log | sort | uniq -c | sort -nr
+}
+alias 'grep-auth-log'="authgrep"
+
+function psgrep () {
+   ps aux | head -1
+   ps aux | grep --color=always -v grep | grep --color=always "$1" -i 
+}
+alias grep-ps='psgrep'
+
+function swgrep () {
+   if [[ -n $1 && -z $2 && -z $3 ]]; then	
+      grep --color=always -irnHI -B 2 -A 2 $1
+   elif [[ -n $1 && -n $2 && -z $3 ]]; then
+      grep --color=always -irnHI -B 2 -A $1 $2
+   elif [[ -n $1 && -n $2 && -n $3 ]]; then
+      grep --color=always -irnHI -B $1 -A $2 -n $3
+   else
+      echo "Syntax is swgrep \$B \$A \$PATTERN"
+   fi
+}
+alias grep-sw='swgrep'
+
+function vargrep () {
+  USAGE='Usage:\nNOTE: In each case, commented vars are omitted via grep -iv :#\n
+  To display all $VAR=.* in a file:\nvargrep $FILE\n
+  To display variable count of a file, or if no file recursive from cd:\nvargrep -c $FILE\n
+  To generate a search grep of each VAR= in a file, or if no file recursive from cd:\nvargrep -s $FILE\n
+  To display this help message:\nvargrep -h\n'
+  [[ $# -eq 0 || $# -gt 2 ]] && echo -e "$USAGE" && return 1
+  options=$(getopt -o h::c::s:: --long cr::sr:: -- "$@")
+  [[ $? -ne 0 ]] && echo "Incorrect options provided, exiting..." && return 1
+  eval set -- "$options"
+  while true; do
+    case "$1" in
+      -h) echo "$USAGE"; return 1;;
+      -c) if [[ -n $4 ]]; then sgrep -o "^[^#].*[a-z0-9_-]*=" "$4" |  cut -d ":" -f 3- | sort | uniq -c | sort -n && return 0
+          else sgrep --color=always -o "^[^#].*[a-z0-9_-]*=" | cut -d ":" -f 3- | sort | uniq -c | sort -n && return 0
+          fi;;
+      -s) if [[ -n $4 ]]; then sgrep -o "^[^#].*[a-z0-9_-]*=" $4 |  cut -d ":" -f 3- | sed 's/^/$/;s/=$//;s/\$/-e /' | sort -u | tr '\n' ' ' | \
+            sed 's/^/\nVAR=\$(grep --color=always -irHnI /;' | sed 's/$/) \&\& echo -e "$VAR" | grep --color=always "=" | sort \&\& echo -e "$VAR" | grep --color=always -iv "=" | sort\n\n/'
+          else sgrep --color=always -o "^[^#].*[a-z0-9_-]*=" |  cut -d ":" -f 3- | sed 's/^/$/;s/=$//;s/\$/-e /' | sort -u | tr '\n' ' ' | \
+            sed 's/^/\nVAR=\$(grep --color=always -irHnI /;' | sed 's/$/) \&\& echo -e "$VAR" | grep --color=always "=" | sort \&\& echo -e "$VAR" | grep --color=always -iv "=" | sort\n\n/'
+          fi; return 0;;
+      --) shift; break;;
+      *) echo "$1 is an invalid option, exiting..."; return 1;
+    esac
+    shift
+  done
+sgrep --color=always -o "[a-z0-9_-]*=.*" "$1" | cut -d ":" -f 3- | sort | uniq -c | sort -n
+}
+alias 'grep-var'="vargrep"
+
+# List installed grep
+function lsig () {
+FN="${FUNCNAME[0]}"
+SYNTAX="Proper syntax:\n$FN search_term\n$FN -a search_term (to display in apt show form)"
+options=$(getopt -o ha -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h) echo -e "$SYNTAX" && return 1;;
+  -a) APTTR=YES;;
+  --) shift; break ;;
+  esac
+  shift
+done
+
+if [ "$APTTR" == "YES" ]; then
+   apt list --installed | grep -i --color=always $@ | cut -d '/' -f 1 | tr '\n' ' ' | sed 's/^/\napt show /' && echo;
+else
+   apt list --installed | grep -i --color=always $@;
+fi
+unset APTTR
+}
+
+# Find functions - attempted to use only native functions like readlink instead of realpath
+function sfind () {
+# CURRENLTY THE -l FUNCTIONALITY IS BROKEN - BLANKS THE QUERY OUT.  NEED TO TEST OTHER OPTIONS ALSO.
+   HELPMSG='Specify term to search for options:\n-l show sym -l inks instead of realpath\n-r type full -r egex instead of default *$SEARCH_TERM*\nExamples:\nsfind "xml"\nsfind -l "xml"\nsfind -l -r "*.log*[^.gz]\n';
+   [[ $# -eq 0 ]] && echo -e "$HELPMSG" && return 1;
+   EXECFN="readlink -f"
+   options=$(getopt -o r:l:h: -- "$@")
+   eval set -- "$options"
+   unset QUERY;
+   while true; do
+       case "$1" in
+       -l) shift; EXECFN="ls -ald";;
+       -r) shift; QUERY="$1";;
+       -h) echo -e "$HELPMSG" && return 1;;
+       --) shift; break;;
+       esac
+   done
+   [[ -z $QUERY ]] && QUERY="*$1*";
+   QUERY="*$1*";
+   find . -iname "$QUERY" -exec $EXECFN {} \;
+}	
+
+function path-check () {
+   EXECFN="readlink -f";
+	QUERY="*$1*";
+   find $(echo $PATH | sed 's/:/ /g') -iname "$QUERY" -exec $EXECFN {} \;
+}
+
+#simple grep find, as in sgrep $1; sfind $1; Grep before find because grep is more verbose, usually
+function sgf () {
+   [[ $# -eq 0 ]] && echo -e 'Specify term to sgf, or rather sgrep and sfind for w/o wildcards, i.e. \nsgf \"xml\"\nOr with two arguments, sgrep first and sfind second with separate terms and wildcards allowed i.e.:\nsgf "-w wut.*up" "*wut*up*"' && return 1;
+   [[ $# -eq 1 && -n $1 ]] && grep --color=always -irHnI "$1"; find . -iname "*$1*" -exec readlink -f {} \;
+   [[ $# -eq 2 && -n $1 && -n $2 ]] && grep --color=always -irHnI "$1"; find . -iname "$2" -exec readlink -f {} \;
+}
+alias 'grep-simple-find'="sgf"
+
+function DB-whohas () { 
+    if [ -z $1 ]; then
+        echo "Pass a database hostname.";
+    else
+        ssh "$1" cat /etc/hostname;
+    fi
+}
+
+function DB-binlog-print() {
+   [[ ! -n $1 ]] && echo "To print binlogs from host, do: binlog-purge $HOST" && return 1;
+   TIMESTAMP="$(date +"%y%m%d")"
+   mkdir -pv $HOME/maintenance/binlog-print-$1-$TIMESTAMP
+   rsudo "$1" 'ls -altrh "/var/lib/mysql/" | grep --color=always -i "bin.0" | cut -d " " -f 6-' > $HOME/maintenance/binlog-print-$1-$TIMESTAMP/$1-$(timestamp)
+   cd $HOME/maintenance/binlog-print-$1-$TIMESTAMP/
+   echo "##############################FULL BINLOG LIST##############################"
+   cat $1-$(timestamp) | sort -k5
+   echo "###########################/var/lib/mysql df -ahT###########################"
+   rsudo "$1" 'df -ahT /var/lib/mysql'
+   echo "#############################FILES > 14 DAYS OLD############################"
+   rsudo "$1" 'find /var/lib/mysql/ -iname "*bin.0*" -mtime +14 -exec ls -alt {} \; | sort -t " " -k9'
+}
+
+function cmkdir() {
+   [[ ! -n $1 ]] && echo "Please specify dir to mkdir -pv and subsequently cd to." && exit 1;
+   mkdir -pv $1
+   cd $1
+}
+
+function cdd() {
+   CDDNAME=$(readlink -f $1)
+   echo $CDDNAME
+   [[ ! -d $CDDNAME ]] && cd $(dirname $CDDNAME)
+   [[ -d $CDDNAME ]] && cd $CDDNAME
+}
+
+diffschemas() {
+    if [ -z "$1" -o -z "$2" ]; then
+        echo "usage: diffschemas <hostname> <hostname>" 1>&2
+        return 1
+    fi
+    diff -u <(mysqldump -h "$1" --all-databases --no-data --skip-comments --triggers --routines --events | sed -e 's/ AUTO_INCREMENT=[0-9]\+//') \
+        <(mysqldump -h "$2" --all-databases --no-data --skip-comments --triggers --routines --events | sed -e 's/ AUTO_INCREMENT=[0-9]\+//')
+}
+
+function lsf () {
+   [[ -z $1 ]] && echo '"lsf" usage: lsf dir - please provide lsf() with a directory to list file names for in a csv format'
+   ls --color=always -alh $1 | sed -n '4~1p' | awk '{ print $9 }' | tr '\n' ',' | sed 's/,$//' 
+   echo ""
+}   
+
+# Show the files modified in "tip" rev 
+# or pass a rev
+hgfiles ()
+{
+    if [ $# -ne 1 ]; then
+        hg log --template "{files}" -r tip | perl -lpe 's/\b \b/\n/g';
+    fi;
+    if [ $# == 1 ]; then
+        hg log --template "{files}" -r$@ | perl -lpe 's/\b \b/\n/g';
+    fi
+}
+
+function _passes_complete() {
+   local cur prev
+   COMPREPLY=()
+   cur="${COMP_WORDS[COMP_CWORD]}"
+   prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+   opts="pronounceable verbal secure api lib safe phone"
+   COMPREPLY=( $(compgen -W "${opts}" -- $cur) )
+}
+
+complete -F _passes_complete passes
+
+# Generate complex passwords
+function passes () {
+   if [ -z $1 ]; then
+      apg -a 1 -M SNLC -m 20 -E \'\\'"#`'
+   elif [ "$1" == "pronounceable" ]; then
+      apg -M SNLC -t -a 0 -m 24
+   elif [ "$1" == "verbal" ]; then
+      apg -M SNLC -a 0 -m 24 -l
+   elif [ "$1" == "secure" ]; then
+      apg  -a 0 -M sncl -n 6 -m 20
+   elif [ "$1" == "api" ]; then
+      apg -a 1 -M SNCL -m 40 -x 40 -n 10 -E \'\\'"#`\/<%('
+   elif [ "$1" == "lib" ]; then
+      apg -a 1 -M SNLC -m 20 -E \'\\\/\@\:\(\)'"#`$'
+   elif [ "$1" == "safe" ]; then
+      apg -a 1 -M NLC -m 20 -E \'\\\/\@\:\(\)'"#`$'
+   elif [ "$1" == "phone" ]; then
+      apg -a 1 -M SNLC -m 20 -E \'\\\/\@\:\(\)'"#`$\{\}\|\!^<>~[]'
+   fi
+}
+
+
+# Show a "pretty diff" of <rev>
+function hg-showchanges () {
+	if [[ $# -ne "1" ]]; then
+		echo "Usage: showchanges <revision>"
+	else
+		hg export $1 | colordiff | less -R
+	fi
+}
+
+# Show InnoDB locks on specified host
+function DB-get_mysql_lock () {
+	CMD="mysql -e \"SHOW ENGINE INNODB STATUS\G SHOW STATUS\""
+	if [ ! -n "$1" ]; then
+      echo "Must pass a host"
+	else
+		HOST="$1"
+      echo -e "Showing status for: $HOST\n"
+      CMD="$CMD -h $HOST | grep --color=always 'lock'"
+      $CMD
+	fi
+}
+
+# Find and display nicely all replicants on a MySQL master
+function DB-show_replicants() {
+   if [ -z "$1" ]; then
+      echo "Pass a master host to show replicants for"
+   else
+      HOST="$1"
+      mysql -h $HOST -e "show full processlist\G" | grep --color=always -B 2 "Binlog Dump" | grep --color=always "Host:" | sed 's/   //g'
+   fi
+}
+
+# Iterates serial number for manual edits to BIND zones based on presence in "git/hg status"
+function update_zone_serial() {
+   ISGIT=$(git status &> /dev/null; echo $?)
+   ISHG=$(hg status &> /dev/null; echo $?)
+   [[ $ISGIT != 0 && $ISHG != 0 ]] && echo "Neither a git nor hg repo... Exiting" && return 1;
+
+   if [ -z $1 ]; then
+      if [ $ISHG = 0 ]; then
+         FILES=$(hg st | cut -d' ' -f2 | tr '\n' ' ')
+      elif [ $ISGIT = 0 ]; then
+         FILES=$(git status -s | cut -d ' ' -f3 | tr '\n' ' ')
+      fi
+   else
+#      if [ ! -f $1 ]; then echo "Can't locate $1" && exit 1; fi
+      FILES=$@
+   fi
+   if [ ! -z "$FILES" ]; then
+      for f in $FILES
+      do
+	      if [ ! -f $f ]; then echo "Can't locate $f"; fi
+         DATE=$(date '+%Y%m%d')
+         REPLACE=$(grep -is "; serial" $f | egrep -o "([0-9]{10})")
+         # Only numerics
+         if [[ "$REPLACE" =~ ^[0-9]+$ ]]
+         then
+            LAST_DATE=$(echo $REPLACE | cut -c 1-8)
+            CURRENT_INCREMENT="00"
+            if [ $LAST_DATE -eq $DATE ]
+            then
+               LAST_INCREMENT=$(echo $REPLACE | cut -c 9-10)
+               CURRENT_INCREMENT=$(expr $LAST_INCREMENT + 1)
+               CURRENT_INCREMENT=$(printf "%02d" $CURRENT_INCREMENT)
+            fi
+            SED="sed -i \"s/$REPLACE/$DATE$CURRENT_INCREMENT/\" \"$f\""
+            $(sed -i "s/$REPLACE/$DATE$CURRENT_INCREMENT/" "$f")
+         fi
+      done
+   else
+      echo "No files specified"
+   fi
+}
+
+# Use function update_zone_serial on all git status -s entries
+function update_zone_serial_all {
+git status -s | cut -d ' ' -f 3 > temp-update-zone-serials.txt
+while read i; do
+   update_zone_serial $i
+done < temp-update-zone-serials.txt
+
+rm -v temp-update-zone-serials.txt
+}
+
+# Move up $1 dirs
+function up {
+    local d="";
+    limit=$1;
+    for ((i=1 ; i <= limit ; i++))
+    do
+        d=$d/..;
+    done;
+    d=$(echo $d | sed 's/^\///');
+    if [ -z "$d" ]; then
+        d=..;
+    fi;
+    cd $d
+}
+
+# Pretty print the grants list for <host> <user>
+function DB-show_grants {
+   if [ -z $1 ]; then
+      echo "Pass a host"
+   fi
+   if [ -z $2 ]; then
+      echo "Pass a username"
+   else
+      mysql --batch -h $1 -e "show grants for $2" | sed 's/$/;/g'
+   fi
+}
+
+# Issue a start slave on <host>
+function DB-start_slave {
+   if [ -z $1 ]; then
+      echo "Pass a host"
+   else
+      mysql -h $1 -e "stop slave; start slave;"
+   fi
+}
+
+# Show slave status for <host>
+function DB-slave_status {
+   if [ -z $1 ]; then
+      echo "Pass a host"
+   else
+      mysql -h $1 -e "show slave status\G"
+   fi
+}
+
+
+# Show row locks in MySQL for <host>
+function DB-mysql_lock_info {
+   if [ -z $1 ]; then
+      echo "Pass a host"
+   else
+      echo "If Innodb_row_lock_current_waits is large, something is likely holding a long lock, do a 'show engine innodb status\G'."
+      echo "If Innodb_row_lock_waits shows how many locks have existed since DB was started, watch if it's incrementing."
+      mysql -h $1 -e "show status like '%row_lock%'"
+   fi
+}
+
+# I think I nabbed at least part of this from someone, but don't recall where - Good I/O display
+function SYS-ioload {
+   case "$OSTYPE" in
+       linux-gnu)
+           io_line_count=`iostat -d -x -m | wc -l` ; 
+           iostat -d -x -m 1 2 -z | tail -n +$io_line_count | grep --color=always -e "^sd[a-z].*" | awk 'BEGIN{rsum=0; wsum=0}{ rsum+=$6; wsum+=$7} END {print "IO Load\nRead:\t" rsum "\nWrite:\t" wsum }'
+           ;;
+   esac
+}
+
+# colorized man pages
+man() {
+    env LESS_TERMCAP_mb=$'\E[01;31m' \
+    LESS_TERMCAP_md=$'\E[01;38;5;74m' \
+    LESS_TERMCAP_me=$'\E[0m' \
+    LESS_TERMCAP_se=$'\E[0m' \
+    LESS_TERMCAP_so=$'\E[38;5;246m' \
+    LESS_TERMCAP_ue=$'\E[0m' \
+    LESS_TERMCAP_us=$'\E[04;38;5;146m' \
+    man "$@"
+}
+
+# serve this directory via http
+function pyserve {
+   PORT=""
+   if [ ! -z $1 ]; then
+      PORT=$1
+   fi
+   python3 -m http.server $PORT
+}
+
+# Show the last commit in directory
+function showtip() {
+   ISHG=$(hg --cwd $PWD root 2>/dev/null)
+   ISGIT=$(git rev-parse --is-inside-work-tree 2>/dev/null)
+   if [ "$ISHG" ]; then
+      hg export tip | colordiff | less -R
+   elif [ "$ISGIT" ]; then
+      git diff HEAD^ HEAD
+   else
+      echo "$PWD doesn't appear to be Mercurial or Git repo"
+   fi
+}
+
+# Local ProxySQL connector
+if [ -f /etc/proxysql.cnf ]; then
+   proxql() {
+      PASS=$(grep "admin_credentials" /etc/proxysql.cnf | cut -d'=' -f2 | sed 's/"//g' | cut -d':' -f2)
+      mysql -h 127.0.0.1 -P 6032 -u admin -p$PASS
+   }
+fi
+
+myrunfile () 
+{ 
+    if [ -z "$1" -o -z "$2" ]; then
+        echo "error: need db host and script name" 1>&2;
+        return 1;
+    fi;
+    DB_HOST="$1";
+    SCRIPT="$2";
+    OUTFILE="$(echo "$SCRIPT" | sed s/\.sql$/-"$(echo "$DB_HOST" | sed s/\.db.*$//)".out/)";
+    if [ -f "$OUTFILE" ]; then
+        echo "error: $OUTFILE exists" 1>&2;
+        return 2;
+    fi;
+    # Check if a Schema Change, if it is throw a warning and break
+    grep --color=always -iE '(ALTER|CREATE|DROP) *(TABLE|DATABASE|INDEX)' $SCRIPT
+    SCHEMA_CHANGE=$?; 
+    [[ $SCHEMA_CHANGE -eq 0 ]] && echo -e "****NOTE: $SCRIPT is a Schema Change!****"
+    mysql -vvv -h "$DB_HOST" < "$SCRIPT" > "$OUTFILE" #|| { echo -e "\n\nERROR: SEE OUTPUT.  Exiting...\n\n" && return 1 };
+    echo "created $OUTFILE"
+    MYGPNAME=$(mygp)
+    echo -e "$2 ran w/o incident on $1, see output: $MYGPNAME\n\nTicket considered resolved, closed.  Please reopen if there's any problems or anything else I can do, thanks!\n"
+}
+
+function mymk() {
+   MYDIR=$HOME/mysql/gitLab/$1_
+   MYDIR_DATE=$MYDIR$(date +"%m%d%y")
+   MYDIR_STAR=$MYDIR*
+   echo -e "$MYDIR \n$MYDIR_DATE \n$MYDIR_STAR"
+   if [ -d "$MYDIR_DATE" ]; then 
+      cd $MYDIR_DATE
+   elif [ -n "$(ls -d $MYDIR_STAR)" ]; then 
+#      echo "$1 EXISTS! Newest is $(ls -td $MYDIR_STAR | head -1)";
+      cp -pvr $(ls -td $MYDIR_STAR | head -1) $MYDIR_DATE            #Copy the newest dir via ls -td $MYDIR_STAR
+      cd $MYDIR_DATE
+   else
+      mkdir -v $MYDIR_DATE
+   fi
+   cd $MYDIR_DATE
+   mymv
+}
+
+#Email sieve file name
+sieve_name ()
+{
+[[ -z $1 ]] && [[ -z $2 ]] && echo "Supply start and end date in following format: \n [ sieve_name 'Jul 25 2019 01:01' 'Jul 29 2019 01:01' ]"
+DATESTART=$(date -d "$1" +%s)
+DATEEND=$(date -d "$2" +%s)
+echo "Sieve autoresponder filename is $DATESTART-$DATEEND.sieve"
+}
+
+idrac6_connect ()
+{
+  numre='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+  jar="/usr/lib/jvm/java-8-openjdk-amd64/bin/jar"
+  java="/usr/lib/jvm/java-8-openjdk-amd64/bin/java"
+  
+  cd $(pwd)
+  
+  if [ ! -z "$1" ]; then
+     if [[ $1 =~ $numre ]]; then
+        drachost=$1
+     else
+        echo "First argument should be an IP"
+        exit 1
+     fi
+  else
+     echo -n 'Host: '
+     read drachost
+  fi
+  
+  if [ ! -z "$2"]; then
+     dracuser=$2
+  else
+     echo "Defaulting to root as user (or pass it as the 2nd arg)"
+     dracuser="root"
+  fi
+  
+  echo -n 'Password: '
+  read -s dracpwd
+  echo
+  
+  # Download files
+  curl="$(which curl) -s -S -O -k"
+  echo "Downloading avctKVM.jar from $drachost"
+  $curl https://$drachost:443/software/avctKVM.jar
+  
+  if [ ! -d 'lib' ]; then
+     mkdir lib
+  fi
+  
+  cd lib
+  $curl https://$drachost:443/software/avctKVMIOLinux64.jar
+  $curl -O -k https://$drachost:443/software/avctVMLinux64.jar
+  $jar xf avctKVMIOLinux64.jar libavctKVMIO.so
+  $jar xf avctVMLinux64.jar libavmlinux.so
+  
+  rm -f avctKVMIOLinux64.jar
+  rm -f avctVMLinux64.jar
+  cd ..
+  
+  echo "Activating console..."
+  $java -cp avctKVM.jar -Djava.library.path=./lib com.avocent.idrac.kvm.Main ip=$drachost kmport=5900 vport=5900 user=$dracuser passwd=$dracpwd apcp=1 version=2 vmprivilege=true "helpurl=https://$drachost:443/help/contents.html" >/dev/null 2>&1
+}
+
+
+# Makes a report on disk usage on a shared server.  Run it local on the server, need to generalize with a -d $DIR option.
+function quotareport()
+{
+   if [ -z $1 ]; then
+      echo "Pass the username to run the report on."
+   else
+      echo "Running quota report for $1."
+      OUTPUT=$(find /srv/mnt/people/public/ -type f -user $1 -exec du -sh {} \; | sort -hr| head -n 100)
+      echo "List found. Emailing file list."
+      echo "${OUTPUT}" | mutt -s "$1"_files -- $EMAIL;
+      echo "Email sent to $EMAIL."
+   fi
+}
+
+# Misc shortcuts for common systemctl sysadmin combos
+function systemctl-ers()
+{
+   if [ -z $1 ]; then
+      echo "Systemctl enable - restart - status; pass the service to run as \'systemctl-ers \$SERVICE\'\$1"
+   else
+      systemctl enable $1 && systemctl restart $1 && systemctl status -l $1
+   fi
+}
+
+function systemctl-sdms()
+{
+   if [ -z $1 ]; then
+      echo "Systemctl stop - disable - mask - status; pass the service to run as \'systemctl-sdms \$SERVICE\'\$1"
+   else
+      systemctl stop $1 && systemctl disable $1 && systemctl mask $1 && systemctl status -l $1
+   fi
+}
+
+function systemctl-rs()
+{
+   if [ -z $1 ]; then
+      echo "Systemctl restart - status; pass the service to run as \'systemctl-rs \$SERVICE\'\$1"
+   else
+      systemctl restart $1 && systemctl status -l $1
+   fi
+}
+
+function systemctl-ss()
+{
+   if [ -z $1 ]; then
+      echo "Systemctl stop - status; pass the service to run as \'systemctl-ss \$SERVICE\'\$1"
+   else
+      systemctl stop $1 && systemctl status -l $1
+   fi
+}
+
+function mkdircd()
+{
+   SYNTAX="\nPurpose: mkdircd will mkdir -pv a dir then cd to it.\n\nUsage: mkdircd \$PATH/TO/DIR\n\n"
+   [[ $(which realpath > /dev/null; echo $?) -ne 0 ]] && echo -e "Dependency required - performing apt install realpath" && apt install realpath -y
+   mkdir -pv "$1"
+   MKC_DIR=$(realpath $1)
+   cd "$MKC_DIR"
+}
+
+function ping-file()
+{
+   USAGE="\nPurpose: ping-file pings a list given in \$FILE\n\nUsage: ping-list \$PATH/TO/IP-OR-HOST-LIST.txt\nOptions:\n-o - check online - report only online hosts\n-d - check dead - report only dead hosts\n\n"
+   MODE="NORMAL"
+   [[ $# -eq 0 || $# -gt 2 ]] && echo -e "$USAGE" && return 1
+   options=$(getopt -o h::o::d:: -- "$@")
+   [[ $? -ne 0 ]] && echo "Incorrect options provided, exiting..." && return 1
+   eval set -- "$options"
+   while true; do
+     case "$1" in
+       -h) echo -e "$USAGE"; return 0;;
+       -d) MODE="OFFLINE";;
+       -o) MODE="ONLINE";;
+       --) shift; break;;
+#       *) echo -e "$1 is an invalid option, exiting...  See usage:\n $USAGE"; return 1;
+     esac
+     shift
+   done
+
+   [[ $(which realpath > /dev/null; echo $?) -ne 0 ]] && echo -e "Dependency required - performing apt install realpath" && apt install realpath -y
+   MKC_FILE=$(realpath $1)
+
+   if [[ $MODE == "NORMAL" ]]; then
+      while read IPS; do ping -c 5 -i 0.2 -W 3 $IPS; echo; done < "$MKC_FILE"
+   elif [[ $MODE == "ONLINE" ]]; then
+      while read IPS; do ping -c 5 -i 0.2 -W 3 $IPS &> /dev/null; [[ $? -eq 0 ]] && echo -e "$IPS"; done < "$MKC_FILE"
+   elif [[ $MODE == "OFFLINE" ]]; then
+      while read IPS; do ping -c 5 -i 0.2 -W 3 $IPS &> /dev/null; RES=$?; [[ $RES -eq 1 ]] && echo -e "$IPS offline"; [[ $RES -eq 2 ]] && echo -e "$IPS dns failed or other error..."; done < "$MKC_FILE"
+   fi
+}
+
+#####################PROXMOX/XEN/VM UTILITIES######################
+
+# STOPPED REVIEWING HERE
+
+function proxmox-list-domus () {
+FN="${FUNCNAME[0]}"
+SYNTAX="Proper syntax:\n$FN\nNo options are required.  -h or -v for this syntax message."
+options=$(getopt -o brghv --long color: -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h|-v) echo -e "$SYNTAX" && return 1;;
+  --) shift; break ;;
+  esac
+  shift
+done
+# Dependencies
+[[ $# -gt 1 ]] && echo -e "$SYNTAX" && return 1;
+
+# Main Script
+NODE_LIST="node1 node2 node3"
+
+for node in $NODE_LIST ; do pvesh get /nodes/$node/qemu ; done
+}
+
+#####################SYSTEM UTILITIES######################
+function SYS-memswapclear ()
+{
+  [[ "$(whoami)" != "root" ]] && echo "You must run this as root" && return 1;
+  sync; echo 1 > /proc/sys/vm/drop_caches
+  sync; echo 2 > /proc/sys/vm/drop_caches
+  echo "PageCache, Dentries, and iNodes cleared from RAM"
+  FREE_MEM=$(free | grep Mem | awk '{ print $4 }')
+  USED_SWAP=$(free | grep Swap | awk '{ print $3 }')
+  if [ "$FREE_MEM" -gt "$USED_SWAP" ]; then
+     echo "Clearing swap to RAM via swapoff -a; swapon -a;"
+     swapoff -a; swapon -a;
+     echo "Swap cleared successfully, or your computer just crashed."
+     free -h
+  else
+     echo "There is more swap to clear than RAM to hold it.  Please free enough RAM by closing more programs.  See htop."i; return 1;
+  fi
+}
+
+function ntp-sync-script()
+{
+   #This should be safe to run w/o crashing anything on live servers even.
+   FN="${FUNCNAME[0]}"
+   SYNTAX="\n$FN syncs ntp on your current or remote host. Usage:
+   \nProper syntax:\n$FN \$HOST\n\$HOST is optional, if blank, runs on localhost.  Remote requires rsudo\n"
+   options=$(getopt -o hv -- "$@")
+   eval set -- "$options"
+   while true; do
+     case "$1" in
+     -h|-v) echo -e "$SYNTAX" && return 1;;
+     --) shift; break ;;
+     esac
+     shift
+   done
+
+   # Dependencies
+   [[ $# -gt 1 ]] && echo -e "Incorrect options provided\n\n$SYNTAX" && return 1;
+#   [[ $# -eq 0 ]] && systemctl stop ntp; ntpd -gq; systemctl start ntp; systemctl status ntp
+#   [[ $# -eq 1 ]] && rsudo "$1" "systemctl stop ntp; ntpd -gq; systemctl start ntp; systemctl status ntp"
+   [[ $# -eq 0 ]] && rsudo-new $(hostname -f) $HOME/git/server-dotfiles/bash/scripts/rsudo/ntp-sync-script.sh
+   [[ $# -eq 1 ]] && rsudo-new "$1" $HOME/git/server-dotfiles/bash/scripts/rsudo/ntp-sync-script.sh
+}
+
+function LIST-version () {
+FN="${FUNCNAME[0]}"
+SYNTAX="\n$FN lists versions of a variety of NOC important software on local or remote host.
+\$HOST can also be a website host i.e. $ORG_DOMAIN, in which case info is displayed for it's hosting server.
+\nProper syntax:\n$FN \$HOST\n\$HOST is optional, if blank, runs on localhost.  Remote requires rsudo\n"
+options=$(getopt -o hv -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h|-v) echo -e "$SYNTAX" && return 1;;
+  --) shift; break ;;
+  esac
+  shift
+done
+# Dependencies
+[[ $# -gt 1 ]] && echo -e "Incorrect options provided\n\n$SYNTAX" && return 1;
+
+# Main Script
+if [[ $# = 0 ]]; then
+   echo -e '\nHostname:'; hostname -f
+   echo -e '\nOS Version:'; lsb_release -a
+   echo -e '\nMySQL Version:'; /usr/sbin/mysql --version
+   echo -e '\nNginx Version:'; /usr/sbin/nginx -v
+   echo -e '\nApache2 Version:'; apache2 -v
+   echo -e '\nNode Version:'; node --version
+   echo -e '\nNpm Version:'; npm --version
+   echo -e '\nComposer Version:'; composer --version
+   echo -e '\nBower Version:'; bower --version
+else
+   rsudo "$1" "echo -e '\nHostname:'; hostname -f"
+   rsudo "$1" "echo -e '\nOS Version:'; lsb_release -a"
+   rsudo "$1" "echo -e '\nMySQL Version:'; mysql --version"
+   rsudo "$1" "echo -e '\nNginx Version:'; /usr/sbin/nginx -v"
+   rsudo "$1" "echo -e '\nApache2 Version:'; /usr/sbin/apache2 -v"
+   rsudo "$1" "echo -e '\nNode Version:'; node --version"
+   rsudo "$1" "echo -e '\nNpm Version:'; npm --version"
+   rsudo "$1" "echo -e '\nComposer Version:'; composer --version"
+   rsudo "$1" "echo -e '\nBower Version:'; bower --version"
+fi
+}
+
+function LIST-sites () {
+FN="${FUNCNAME[0]}"
+SYNTAX="\n$FN lists all apache2/nginx/db sites hosted on a \$HOST.
+\nProper syntax:\n$FN \$HOST\n\$HOST is optional, if blank, runs on localhost.  Remote requires rsudo\n"
+options=$(getopt -o hv -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h|-v) echo -e "$SYNTAX" && return 1;;
+  --) shift; break ;;
+  esac
+  shift
+done
+# Dependencies
+[[ $# -gt 1 ]] && echo -e "Incorrect options provided\n\n$SYNTAX" && return 1;
+SCRIPT_PATH="$HOME/git/server-dotfiles/bash/scripts/query_host_sites.sh"
+[[ ! -f "$SCRIPT_PATH" ]] && echo -e "\n\nPlease ensure script $SCRIPT_PATH exists and re-run.  Exiting...\n\n" && return 1;
+[[ $# -eq 0 ]] && $SCRIPT_PATH
+[[ $# -eq 1 ]] && rsudo-new -s "$1" "$SCRIPT_PATH"
+}
+
+function LIST-VM-aliases () {
+FN="${FUNCNAME[0]}"
+SYNTAX="\nProper syntax (no options):\n$FN\n\n$FN - Simply echo/list all aliases/functions for use in a VM.\n\n"
+options=$(getopt -o hv -- "$@")
+eval set -- "$options"
+while true; do
+  case "$1" in
+  -h|-v) echo -e "$SYNTAX" && return 1;;
+  --) shift; break ;;
+  esac
+  shift
+done
+
+echo -e '\n
+# Common aliases for VMs, etc, copypasta
+alias ll="ls --color=auto -alh"
+alias grep="grep --color=auto"
+alias sgrep="grep --exclude-dir=.git --exclude-dir=.hg --color=auto -irHnI"
+alias lsig="apt list --installed | grep --color=always"
+alias lsig2="dpkg --get-selections | grep -iw install | cut -f 1 | grep --color=always -i"
+alias vim="vim -O "
+alias view="view -O "
+alias "cd-"="cd -"
+alias "cd.."="cd ../"
+alias "cd..."="cd ../../"
+alias "cd...."="cd ../../../"
+alias "cd....."="cd ../../../../"
+alias "cd......"="cd ../../../../../"
+alias "cd......."="cd ../../../../../../"
+alias "cd........"="cd ../../../../../../../"
+alias sort-cnt="sort | uniq -c | sort -n" # Can add -r to reverse sort at the end
+alias CC="echo -e \"\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\\n\""
+function psgrep () {
+   ps aux | head -1
+   ps aux | grep -v grep | grep --color=always "$1" -i
+}
+alias ncwgrep="grep -v -e \"^[#;]\" -e \"^[[:space:]]*[#;]\" -e \"^[[:space:]]*$\""
+function path-check () {
+   EXECFN="readlink -f";QUERY="*$1*";
+   find $(echo $PATH | sed "s/:/ /g") -iname "$QUERY" -exec $EXECFN {} \;
+}
+function sfind () {
+   EXECFN="readlink -f";QUERY="*$1*";
+   find . -iname "$QUERY" -exec $EXECFN {} \;
+}
+\n\n'
+}
+
+
+
+function fpmstat-all () {
+	FN="${FUNCNAME[0]}"
+	SYNTAX="\n$FN checks all fpm sockets on the localhost.
+	\nProper syntax:\n$FN\nRuns on localhost.\n"
+	options=$(getopt -o hv -- "$@")
+	eval set -- "$options"
+	while true; do
+	  case "$1" in
+	  -h|-v) echo -e "$SYNTAX" && return 1;;
+	  --) shift; break ;;
+	  esac
+	  shift
+	done
+	# Dependencies
+   [[ $(lsof | grep -q "^php.*fpm\..*\.sock"; echo $?) -gt 0 ]] && echo -e "Check that php is running. Exiting...\n\n" && return 1;
+   [[ $(which cgi-fcgi &> /dev/null; echo $?) -gt 0 ]] && echo -e "Check that php is running and cgi-fcgi cmd is in \$PATH. Exiting...\n\n" && return 1;
+   [[ $USER != root ]] && echo -e "$FN must be run as root. Exiting...\n\n" && return 1;
+
+   for SOCK in $(lsof | grep --color=always "^php.*fpm\..*\.sock" | grep --color=always -iIEo "\/([-0-9a-z_.]*\/){1,100}[-0-9a-z_.]*" | sort -u); do
+      echo -e "\n\n####### $SOCK #######"
+      cgi-fcgi -bind -connect "$SOCK"
+   done
+}
+
+############DIFFERENT CONFIGURATION CHECKERS###############
+function cfgchk-icinga1()
+{
+while getopts :h OPT; do
+   case $OPT in
+      h) echo -e "Usage: \nTo check default /etc/icinga/icinga.cfg:\ncfgchk-icinga1\nTo check another conf:\n cfgchk-icinga1 '/etc/icinga/custom.cfg'" && return 1;;
+      \?) "Error: Invalid option -$OPTARG" && return 1;;
+   esac
+done
+RELOAD_MSG='To reload icinga, use\nservice icinga reload;service icinga status;\nOR FOR SYSTEMD:\nsystemctl reload icinga;systemctl status icinga;\n'
+[[ -z $1 && -e /etc/icinga/icinga.cfg ]] && (icinga -v /etc/icinga/icinga.cfg && echo -e "$RELOAD_MSG") || echo -e "Default /etc/icinga/icinga.cfg does not exist.  Please specify the icinga.cfg you'd like to check via:\ncfgchk-icinga1 '/etc/icinga/custom.cfg'" && return 1;
+if [ -n $1 ]; then
+   [[ ! -e $1 ]] && echo -e "User specified Icinga config $1 does not exist.  Please specify the icinga.cfg you'd like to check via:\ncfgchk-icinga1 '/etc/icinga/custom.cfg'" && return 1;
+   icinga -v $1 && echo -e "$RELOAD_MSG"
+fi
+}
+
+alias cfgchk-icinga2='icinga2 daemon -C && (systemctl status -l icinga2; echo -e "To reload icinga2, use\nservice icinga2 reload;service icinga2 status;\nOR FOR SYSTEMD:\nsystemctl reload icinga2;systemctl status icinga2;\n")'     #This -C takes no args
+
+function cfgchk-dhcpd()
+{
+while getopts :h OPT; do
+   case $OPT in
+      h) echo -e "Usage: \nTo check isc-dhcp-server default /etc/dhcp/dhcpd.conf:\ncfgchk-dhcpd\nTo check another conf:\n cfgchk-dhcpd '/etc/dhcp/custom.conf'" && return 1;;
+      \?) "Error: Invalid option -$OPTARG" && return 1;;
+   esac
+done
+RELOAD_MSG='To reload isc-dhcp-server, use:\ndhcpreload;service isc-dhcp-server status\nOR FOR SYSTEMD:\ndhcpreload;systemctl status isc-dhcp-server;'
+
+[[ -z $1 && -e /etc/dhcp/dhcpd.conf ]] && (dhcpd -t -cf /etc/dhcp/dhcpd.conf && echo -e "$RELOAD_MSG") || echo -e "Default /etc/dhcp/dhcpd.conf does not exist.  Please specify the dhcpd conf you'd like to check via:\ncfgchk-dhcpd '/etc/dhcp/custom.conf'" && return 1;
+if [ -n $1 ]; then
+   [[ ! -e $1 ]] && echo -e "User specified dhcpd config $1 does not exist.  Please specify the isc-dhcp-server dhcpd conf you'd like to check via:\ncfgchk-dhcpd '/etc/dhcp/custom.conf'" && return 1;
+   dhcpd -t -cf $1 && echo -e "$RELOAD_MSG"
+fi
+}
+
+function cfgchk-php() {
+   PHPDIR="/etc/php"
+   for i in $(ls $PHPDIR/*/fpm/{pools-available,pool.d}/*); do php -l $i; done
+	[[ $(type php5 &> /dev/null; echo $?) -eq 0 ]] && php5 -v && echo -e 'To reload php5-fpm:\nsystemctl status -l php5-fpm\nsystemctl reload php5-fpm\n\n'
+	[[ $(type php5-fpm &> /dev/null; echo $?) -eq 0 ]] && php5-fpm -v && echo -e 'To reload php5-fpm:\nsystemctl status -l php5-fpm\nsystemctl reload php5-fpm\n\n'
+	[[ $(type php5.6 &> /dev/null; echo $?) -eq 0 ]] && php5.6 -v && echo -e 'To reload php5-fpm:\nsystemctl status -l php5-fpm\nsystemctl reload php5-fpm\n\n'
+	[[ $(type php-fpm5.6 &> /dev/null; echo $?) -eq 0 ]] && php-fpm5.6 -v && echo -e 'To reload php5-fpm:\nsystemctl status -l php5-fpm\nsystemctl reload php5-fpm\n\n'
+	[[ $(type php7.0 &> /dev/null; echo $?) -eq 0 ]] && php7.0 -v && echo -e 'To reload php7.0-fpm:\nsystemctl status -l php7.0-fpm\nsystemctl reload php7.0-fpm\n\n'
+	[[ $(type php-fpm7.0 &> /dev/null; echo $?) -eq 0 ]] && php-fpm7.0 -v && echo -e 'To reload php7.0-fpm:\nsystemctl status -l php7.0-fpm\nsystemctl reload php7.0-fpm\n\n'
+	[[ $(type php7.1 &> /dev/null; echo $?) -eq 0 ]] && php7.1 -v && echo -e 'To reload php7.1-fpm:\nsystemctl status -l php7.1-fpm\nsystemctl reload php7.1-fpm\n\n'
+	[[ $(type php-fpm7.1 &> /dev/null; echo $?) -eq 0 ]] && php-fpm7.1 -v && echo -e 'To reload php7.1-fpm:\nsystemctl status -l php7.1-fpm\nsystemctl reload php7.1-fpm\n\n'
+	[[ $(type php7.2 &> /dev/null; echo $?) -eq 0 ]] && php7.2 -v && echo -e 'To reload php7.2-fpm:\nsystemctl status -l php7.2-fpm\nsystemctl reload php7.2-fpm\n\n'
+	[[ $(type php-fpm7.2 &> /dev/null; echo $?) -eq 0 ]] && php-fpm7.2 -v && echo -e 'To reload php7.2-fpm:\nsystemctl status -l php7.2-fpm\nsystemctl reload php7.2-fpm\n\n'
+	[[ $(type php7.3 &> /dev/null; echo $?) -eq 0 ]] && php7.3 -v && echo -e 'To reload php7.3-fpm:\nsystemctl status -l php7.3-fpm\nsystemctl reload php7.3-fpm\n\n'
+	[[ $(type php-fpm7.3 &> /dev/null; echo $?) -eq 0 ]] && php-fpm7.3 -v && echo -e 'To reload php7.3-fpm:\nsystemctl status -l php7.3-fpm\nsystemctl reload php7.3-fpm\n\n'
+	[[ $(type php7.4 &> /dev/null; echo $?) -eq 0 ]] && php7.4 -v && echo -e 'To reload php7.4-fpm:\nsystemctl status -l php7.4-fpm\nsystemctl reload php7.4-fpm\n\n'
+	[[ $(type php-fpm7.4 &> /dev/null; echo $?) -eq 0 ]] && php-fpm7.4 -v && echo -e 'To reload php7.4-fpm:\nsystemctl status -l php7.4-fpm\nsystemctl reload php7.4-fpm\n\n'
+	[[ $(type php8.0 &> /dev/null; echo $?) -eq 0 ]] && php8.0 -v && echo -e 'To reload php8.0-fpm:\nsystemctl status -l php8.0-fpm\nsystemctl reload php8.0-fpm\n\n'
+	[[ $(type php-fpm8.0 &> /dev/null; echo $?) -eq 0 ]] && php-fpm8.0 -v && echo -e 'To reload php8.0-fpm:\nsystemctl status -l php8.0-fpm\nsystemctl reload php8.0-fpm\n\n'
+	[[ $(type php8.1 &> /dev/null; echo $?) -eq 0 ]] && php8.1 -v && echo -e 'To reload php8.1-fpm:\nsystemctl status -l php8.1-fpm\nsystemctl reload php8.1-fpm\n\n'
+	[[ $(type php-fpm8.1 &> /dev/null; echo $?) -eq 0 ]] && php-fpm8.1 -v && echo -e 'To reload php8.1-fpm:\nsystemctl status -l php8.1-fpm\nsystemctl reload php8.1-fpm\n\n'
+	[[ $(type php8.2 &> /dev/null; echo $?) -eq 0 ]] && php8.2 -v && echo -e 'To reload php8.2-fpm:\nsystemctl status -l php8.2-fpm\nsystemctl reload php8.2-fpm\n\n'
+	[[ $(type php-fpm8.2 &> /dev/null; echo $?) -eq 0 ]] && php-fpm8.2 -v && echo -e 'To reload php8.2-fpm:\nsystemctl status -l php8.2-fpm\nsystemctl reload php8.2-fpm\n\n'
+	[[ $(type php8.3 &> /dev/null; echo $?) -eq 0 ]] && php8.3 -v && echo -e 'To reload php8.3-fpm:\nsystemctl status -l php8.3-fpm\nsystemctl reload php8.3-fpm\n\n'
+	[[ $(type php-fpm8.3 &> /dev/null; echo $?) -eq 0 ]] && php-fpm8.3 -v && echo -e 'To reload php8.3-fpm:\nsystemctl status -l php8.3-fpm\nsystemctl reload php8.3-fpm\n\n'
+	echo -e "And default PHP selection is:\n$(php -v)"
+}
+
+alias cfgchk-bind='named-checkconf -z > /dev/null && echo -e "If output clear, no errors detected. Use (SAFE FOR WORK)\nrndc reload\nto gracefully reload BIND/named\nNow tailing /var/log/daemon.log for grep named to verify zone transfers on graceful reload, ctrl+C to exit back to shell..." && tail -f /var/log/daemon.log | grep named'    #Doesn't take args
+alias cfgchk-named='named-checkconf -z > /dev/null && echo -e "If output clear, no errors detected. Use (SAFE FOR WORK)\nrndc reload\nto gracefully reload BIND/named\nNow tailing /var/log/daemon.log for grep named to verify zone transfers on graceful reload, ctrl+C to exit back to shell..." && tail -f /var/log/daemon.log | grep named'    #Doesn't take args
+alias cfgchk-apache2='apache2ctl configtest && (systemctl status apache2; echo -e "To reload apache2 (SAFE FOR WORK):\napache2ctl -k graceful; systemctl status apache2;")'
+alias cfgchk-nginx='nginx -t && (systemctl status nginx; echo -e "To reload nginx (SAFE FOR WORK):\nsystemctl reload nginx; systemctl status nginx;")'
+alias cfgchk-haproxy='haproxy -f /etc/haproxy/hosts/$(hostname).cfg -c && (systemctl status haproxy; echo -e "To reload haproxy (SAFE FOR WORK):\nsystemctl reload haproxy; systemctl status haproxy;")'
+
+# [ spamassassin --lint ] returns a code equal to the number of errors found.  One error, $?=1, five errors and $?=5
+alias cfgchk-spamassassin='spamassassin --lint && echo -e "To reload spamassassin, use either\n\nspamreload\n\n-OR-\n\n/srv/cli/sbin/sa_restart; sleep 2; grep spamd /var/log/mail.log |tail -n 20\n\n-OR-\n\nsystemctl reload spamassassin;systemctl status reload spamassassin\nservice spamassassin reload; service spamassassin status\n"'
+
+alias cfgchk-rsyslog='(rsyslogd -N 10; echo $?) && echo -e "To reload rsyslog, use\n\nsystemctl reload rsyslog;systemctl status -l rsyslog\nservice rsyslog reload; service rsyslog status\n"'
+######################### ICINGA2 ##########################
+function Icinga2-global-notif () {
+  FN="${FUNCNAME[0]}"
+  SYNTAX="Proper syntax:\n\nTo enable on all Icinga hosts:\n$FN enable\n\nAnd to disable:\n$FN disable"
+  options=$(getopt -o hv --long help -- "$@")
+  [ $? -eq 0 ] || { echo -e "Incorrect options provided\n$SYNTAX" && return 1; }
+  eval set -- "$options"
+  while true; do
+    case "$1" in
+    -h|-v|--help) echo -e "$SYNTAX" && return 1;;
+    --) shift; break ;;
+    esac
+    shift
+  done
+  # Dependencies
+  [[ $# -ne 1 ]] && echo -e "$SYNTAX" && return 1;
+  [[ -z $ICINGA_USER ]] && echo -e "Define ICINGA_USER var in ~/.bash_cred first.  Exiting."
+  [[ -z $ICINGA_PW ]] && echo -e "Define ICINGA_PW var in ~/.bash_cred first.  Exiting."
+  ICG_HOSTS="icinga1 icinga2 icinga3"
+
+  # Main Script
+  if [[ $1 == "enable" ]]; then
+    for ICINGAHOST in $ICG_HOSTS; do
+      curl -k s -u $ICINGA_USER:$ICINGA_PW -H 'Accept: application/json'  -X POST "https://$ICINGAHOST:5665/v1/objects/icingaapplications/app"  -d '{ "attrs": { "enable_notifications": true } }' && \
+      echo -e "\n$ICINGAHOST notifs enabled successfully.\n\n"
+    done
+  elif [[ $1 == "disable" ]]; then
+    for ICINGAHOST in $ICG_HOSTS; do
+      curl -k s -u $ICINGA_USER:$ICINGA_PW -H 'Accept: application/json'  -X POST "https://$ICINGAHOST:5665/v1/objects/icingaapplications/app"  -d '{ "attrs": { "enable_notifications": false } }' && \
+      echo -e "\n$ICINGAHOST notifs disabled successfully.\n\n"
+    done
+  else
+    echo -e "$SYNTAX" && return 1;
+  fi
+}
