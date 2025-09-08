@@ -1,0 +1,10 @@
+backup_*.tar.gz
+*.swp
+OUT/
+OLD/
+OLD*/
+cred/
+examples/practice-gitignore-gitkeep/*
+install-scripts/logs/*
+bash_local
+bash_creds
