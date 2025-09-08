@@ -1,0 +1,28 @@
+# Sample .bash_local file.  Replace with your own vars as needed.  Keep this one clean of sensitive data.
+# Values listed here are for reference
+
+export ORG_USER="youruser"
+export ORG_DOMAIN="yourdomain.com"
+export EMAIL="${ORG_USER}@${ORG_DOMAIN}"
+export WS_HOSTNAME="your-workstations-fqdn.${ORG_DOMAIN}"
+export WS_IP="10.0.0.50"
+
+# Git/Gitlab/GitlabCI
+export GIT_EMAIL="${EMAIL}"
+export GIT_NAME="First Last"
+export GITLAB_URL="your-orgs.gitlab.${ORG_DOMAIN}"
+
+# Hg/Mercurial
+export HGUSER="${GIT_NAME} <$EMAIL>"
+export HGACCOUNT="${ORG_USER}"
+
+# SALTSTACK
+export SALT_MASTER_HOST="your-orgs.salt.${ORG_DOMAIN}"
+
+# Vault
+export VAULT_ADDR="https://your-vault-consul-url.${ORG_DOMAIN}:8200"
+export VAULT_SSH_SIGN_PATH="path-where-your/signed/ssh-keys-are-stored/in/vault"
+function sign-cert {
+        ( cat ~/.ssh/rsa-key-input.json | vault write -field=signed_key $VAULT_SSH_SIGN_PATH - > ~/.ssh/id_rsa-cert.pub
+        cat ~/.ssh/ecdsa-key-input.json | vault write -field=signed_key $VAULT_SSH_SIGN_PATH - > ~/.ssh/id_ecdsa-cert.pub )
+}

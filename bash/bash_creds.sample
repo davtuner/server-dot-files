@@ -1,0 +1,19 @@
+# API Keys/Tokens/etc
+#
+# Sample - left this in for salt state distribution to user to fill locally, in case I want to set local vars
+# based on what is listed in my bash_profile already...
+#
+# export OS_AUTH_URL=https://endpoint
+# export OS_USERNAME=
+# export OS_TENANT_NAME=rackspace account number
+# export OS_TENANT_ID=rackspace account number
+# export OS_PROJECT_ID=rackspace account number
+# export OS_REGION_NAME=DFW
+# export OS_PASSWORD=HASH
+# export OS_EXECUTABLE=neutron
+# export OS_AUTH_SYSTEM=rackspace
+# export OS_AUTH_STRATEGY=rackspace
+# export OS_NO_CACHE=1
+
+# export ICINGA_USER='icinga'
+# export ICINGA_PW=''
